@@ -1,13 +1,13 @@
 package main
 
 import (
-	"database/sql"
 	"encoding/json"
 	_ "github.com/lib/pq"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"todo/db"
 )
 
 var todos = []Todo{
@@ -22,19 +22,20 @@ type Todo struct {
 }
 
 func main() {
+	db.InitDB()
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/todos", TodosHandler)
 	mux.HandleFunc("/todos/", TodoHandler)
 
-	log.Println("Server is running on port 8080")
+	log.Println("Server is running on port 8080!")
 	log.Fatal(http.ListenAndServe(":8080", mux))
 }
 
 func TodosHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		rows, err := GetDB().Query("SELECT id, title, completed FROM todos")
+		rows, err := db.GetDB().Query("SELECT id, title, completed FROM todos")
 		if err != nil {
 			return
 		}
@@ -47,10 +48,6 @@ func TodosHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			todos = append(todos, todo)
-		}
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
 		}
 		json.NewEncoder(w).Encode(todos)
 	case "POST":
@@ -115,22 +112,4 @@ func DeleteTodo(w http.ResponseWriter, r *http.Request, id int) {
 		}
 	}
 	http.NotFound(w, r)
-}
-
-var db *sql.DB
-
-func InitDB(dataSourceName string) {
-	var err error
-	db, err = sql.Open("postgres", dataSourceName)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err = db.Ping(); err != nil {
-		log.Fatal(err)
-	}
-	log.Println("Database connection established")
-}
-
-func GetDB() *sql.DB {
-	return db
 }
