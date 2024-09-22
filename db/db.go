@@ -3,15 +3,17 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	_ "github.com/lib/pq"
 	"log"
+	"os"
+
+	_ "github.com/lib/pq"
 )
 
 var db *sql.DB
 
 func InitDB() {
-	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		"postgres", 5432, "todo_user", "todo_password", "todo_db")
+	psqlInfo := os.Getenv("DB_URL")
+	log.Println(psqlInfo)
 
 	var err error
 	db, err = sql.Open("postgres", psqlInfo)
