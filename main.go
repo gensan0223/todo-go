@@ -1,19 +1,16 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
-	_ "github.com/lib/pq"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"todo/db"
-)
 
-var todos = []Todo{
-	{ID: 1, Title: "Task 1", Completed: false},
-	{ID: 2, Title: "Task 2", Completed: true},
-}
+	_ "github.com/lib/pq"
+)
 
 type Todo struct {
 	ID        int    `json:"id"`
@@ -23,93 +20,96 @@ type Todo struct {
 
 func main() {
 	db.InitDB()
+	defer db.GetDB().Close()
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/todos", TodosHandler)
-	mux.HandleFunc("/todos/", TodoHandler)
+	mux.HandleFunc("GET /todos", GetTodos)
+	mux.HandleFunc("POST /todos", PostTodos)
+	mux.HandleFunc("GET /todos/{id}", GetTodoById)
+	mux.HandleFunc("PUT /todos/{id}", UpdateTodo)
+	mux.HandleFunc("DELETE /todos/{id}", DeleteTodo)
 
 	log.Println("Server is running on port 8080!")
 	log.Fatal(http.ListenAndServe(":8080", mux))
 }
 
-func TodosHandler(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "GET":
-		rows, err := db.GetDB().Query("SELECT id, title, completed FROM todos")
-		if err != nil {
-			return
-		}
-		defer rows.Close()
-
-		var todos []Todo
-		for rows.Next() {
-			var todo Todo
-			if err := rows.Scan(&todo.ID, &todo.Title, &todo.Completed); err != nil {
-				return
-			}
-			todos = append(todos, todo)
-		}
-		json.NewEncoder(w).Encode(todos)
-	case "POST":
-		var todo Todo
-		_ = json.NewDecoder(r.Body).Decode(&todo)
-		todos = append(todos, todo)
-		w.Header().Set("Content-type", "application/json")
-	}
-}
-
-func TodoHandler(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimPrefix(r.URL.Path, "/todos/")
-	id, err := strconv.Atoi(idStr)
+func GetTodos(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.GetDB().Query("SELECT id, title, completed FROM todos")
 	if err != nil {
-		http.Error(w, "Invalid ID", http.StatusBadRequest)
 		return
 	}
-	switch r.Method {
-	case "GET":
-		GetTodo(w, r, id)
-	case "PUT":
-		UpdateTodo(w, r, id)
-	case "DELETE":
-		DeleteTodo(w, r, id)
-	}
-}
+	defer rows.Close()
 
-func GetTodo(w http.ResponseWriter, r *http.Request, id int) {
-	for _, todo := range todos {
-		if todo.ID == id {
-			w.Header().Set("Content-type", "application/json")
-			json.NewEncoder(w).Encode(todo)
+	var todos []Todo
+	for rows.Next() {
+		var todo Todo
+		if err := rows.Scan(&todo.ID, &todo.Title, &todo.Completed); err != nil {
 			return
 		}
+		todos = append(todos, todo)
 	}
-	http.NotFound(w, r)
+	json.NewEncoder(w).Encode(todos)
 }
 
-func UpdateTodo(w http.ResponseWriter, r *http.Request, id int) {
-	for i, todo := range todos {
-		if todo.ID == id {
-			var updatedTodo Todo
-			_ = json.NewDecoder(r.Body).Decode(&updatedTodo)
-			updatedTodo.ID = id
-			todos[i] = updatedTodo
-			w.Header().Set("Content-type", "application/json")
-			json.NewEncoder(w).Encode(todo)
-			return
-		}
+func PostTodos(w http.ResponseWriter, r *http.Request) {
+	var todo Todo
+	_ = json.NewDecoder(r.Body).Decode(&todo)
+	query := `INSERT INTO todos VALUES($1, $2, $3) RETURNING id, title, completed`
+	err := db.GetDB().QueryRow(query, todo.ID, todo.Title, todo.Completed).Scan(&todo.ID, &todo.Title, &todo.Completed)
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
 	}
-	http.NotFound(w, r)
+	w.Header().Set("Content-type", "application/json")
+	json.NewEncoder(w).Encode(todo)
 }
 
-func DeleteTodo(w http.ResponseWriter, r *http.Request, id int) {
-	for i, todo := range todos {
-		if todo.ID == id {
-			todos[i] = todos[len(todos)-1]
-			todos = todos[:len(todos)-1]
-			w.Header().Set("Content-type", "application/json")
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
+func GetTodoById(w http.ResponseWriter, r *http.Request) {
+	var todo Todo
+	_ = json.NewDecoder(r.Body).Decode(&todo)
+	id, _ := strconv.Atoi(r.PathValue("id"))
+	query := `SELECT * FROM todos WHERE id = $1`
+	err := db.GetDB().QueryRow(query, id).Scan(&todo.ID, &todo.Title, &todo.Completed)
+	switch {
+	case err == sql.ErrNoRows:
+		log.Printf("no user with id %d\n", id)
+	case err != nil:
+		log.Println(err)
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
 	}
-	http.NotFound(w, r)
+	w.Header().Set("Content-type", "application/json")
+	json.NewEncoder(w).Encode(todo)
+}
+
+func UpdateTodo(w http.ResponseWriter, r *http.Request) {
+	var todo Todo
+	_ = json.NewDecoder(r.Body).Decode(&todo)
+	id, _ := strconv.Atoi(r.PathValue("id"))
+	query := `UPDATE todos SET title = $1, completed = $2 WHERE id = $3 RETURNING id, title, completed`
+	err := db.GetDB().QueryRow(query, todo.Title, todo.Completed, id).Scan(&todo.ID, &todo.Title, &todo.Completed)
+	switch {
+	case err == sql.ErrNoRows:
+		log.Printf("no user with id %d\n", id)
+	case err != nil:
+		log.Println(err)
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+	}
+	w.Header().Set("Content-type", "application/json")
+	json.NewEncoder(w).Encode(todo)
+}
+
+func DeleteTodo(w http.ResponseWriter, r *http.Request) {
+	var todo Todo
+	id, _ := strconv.Atoi(r.PathValue("id"))
+	query := `DELETE FROM todos WHERE id = $1`
+	_, err := db.GetDB().Exec(query, id)
+	switch {
+	case err == sql.ErrNoRows:
+		log.Printf("no user with id %d\n", id)
+	case err != nil:
+		log.Println(err)
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+	}
+	w.Header().Set("Content-type", "application/json")
+	json.NewEncoder(w).Encode(todo)
 }

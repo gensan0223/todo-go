@@ -20,9 +20,9 @@ func InitDB() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
 
 	createTable(db)
+	// seedTodos()
 
 	if err = db.Ping(); err != nil {
 		log.Fatal(err)
@@ -47,4 +47,13 @@ func createTable(db *sql.DB) {
 		log.Fatal(err)
 	}
 	fmt.Println("Table created successfully")
+}
+
+func seedTodos() {
+	query := `INSERT INTO todos VALUES (1, 'First', 'false')`
+	_, err := db.Exec(query)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Seed successfully")
 }
