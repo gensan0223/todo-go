@@ -5,8 +5,8 @@ FROM golang:1.23-alpine
 WORKDIR /app
 
 # Go Modulesの依存関係をキャッシュするためにまずgo.modとgo.sumをコピー
-COPY go.mod ./
-COPY go.sum ./
+COPY go.mod .
+COPY go.sum .
 RUN go install github.com/air-verse/air@latest
 RUN go mod download
 

@@ -29,7 +29,7 @@ func main() {
 	mux.HandleFunc("PUT /todos/{id}", UpdateTodo)
 	mux.HandleFunc("DELETE /todos/{id}", DeleteTodo)
 
-	log.Println("Server is running on port 8080!")
+	log.Println("Server is running on port 8080!!!")
 	log.Fatal(http.ListenAndServe(":8080", mux))
 }
 

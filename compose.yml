@@ -13,7 +13,7 @@ services:
 
   goapp:
     build:
-      context: .
+      context: backend
       dockerfile: Dockerfile
     depends_on:
       - postgres
@@ -21,6 +21,9 @@ services:
       - "8080:8080"
     environment:
       DB_URL: ${DB_URL}
+    volumes:
+      - ./backend/:/app  # ローカルファイルをコンテナ内にマウント
+      - /app/tmp
 
 volumes:
   postgres-data:
